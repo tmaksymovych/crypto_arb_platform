@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: arb_redis
+    ports:
+      - "6379:6379"
+
+  collector:
+    build:
+      context: .
+      dockerfile: services/collector/Dockerfile
+    depends_on:
+      - redis
+    env_file: .env
