@@ -15,8 +15,8 @@ logger = logging.getLogger("Analyzer")
 
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 
-THRESHOLD = 1.0  # Arbitrage threshold in percentage
-SIGNAL_TTL = 1800  # Time to live for arbitrage signals in seconds (30 minutes)
+THRESHOLD = 0.45  # Arbitrage threshold in percentage
+SIGNAL_TTL = 150  # Time to live for arbitrage signals in seconds (2.5 minutes)
 BLACKLIST = ['U/USDT']
 
 async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, sell_ticker):
