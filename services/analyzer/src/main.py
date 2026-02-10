@@ -15,6 +15,7 @@ logger = logging.getLogger("Analyzer")
 
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 
+MIN_VOLUME_USDT = 10000.0
 THRESHOLD = 0.45  # Arbitrage threshold in percentage
 SIGNAL_TTL = 150  # Time to live for arbitrage signals in seconds (2.5 minutes)
 BLACKLIST = ['U/USDT']
@@ -108,6 +109,9 @@ async def main():
 
                         ticker1 = exchanges[EX1]
                         ticker2 = exchanges[EX2]
+
+                        if ticker1.quoteVolume < MIN_VOLUME_USDT or ticker2.quoteVolume < MIN_VOLUME_USDT:
+                            continue
 
                         await check_arbitrage(r, symbol, EX1, EX2, ticker1, ticker2)
                         await check_arbitrage(r, symbol, EX2, EX1, ticker2, ticker1)

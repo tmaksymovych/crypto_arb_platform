@@ -10,6 +10,7 @@ class Ticker(BaseModel):
     bid: float #price we can sell
     ask: float #price we can buy
     volume: float #number of shares traded USD
+    quoteVolume: float = 0.0 #number of shares traded in quote currency, if available
 
     can_withdraw: bool = True
     can_deposit: bool = True
