@@ -41,7 +41,7 @@ async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, se
     if not start_time:
         # it is 1st signal, start timer
         await r.set(signal_key, time.time())
-        logger.info(f"New arbitrage signal: {symbol} {buy_exchange}→{sell_exchange} profit={profit:.2f}%")
+        # logger.info(f"New arbitrage signal: {symbol} {buy_exchange}→{sell_exchange} profit={profit:.2f}%")
     else:
         # signal already exists, check duration
         duration = time.time() - float(start_time)
@@ -50,10 +50,10 @@ async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, se
             logger.info(f"Signal confirmed: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
             # here you call telegram bot
             await r.delete(signal_key)    
-        else:
-            # to not spam logs, we log only once per minute
-            if int(duration) % 60 < 5:
-                logger.info(f"Signal pending: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
+        # else:
+        #     # to not spam logs, we log only once per minute
+        #     if int(duration) % 60 < 5:
+        #         logger.info(f"Signal pending: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
     # else:
     #     # if profit drops below threshold, remove signal
     #     if await r.exists(signal_key):
