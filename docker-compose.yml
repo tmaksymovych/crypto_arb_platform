@@ -1,16 +1,42 @@
-version: '3.8'
-
 services:
   redis:
     image: redis:7-alpine
     container_name: arb_redis
     ports:
       - "6379:6379"
+    restart: always
 
-  collector:
-    build:
-      context: .
-      dockerfile: services/collector/Dockerfile
+  analyzer:
+    build: .
+    container_name: arb_analyzer
+    command: python3 services/analyzer/src/main.py
+    environment:
+      - REDIS_HOST=redis
     depends_on:
       - redis
+    restart: always
+
+  # --- КОЛЛЕКТОРЫ БИРЖ ---
+  
+  # Базовый шаблон (чтобы не писать одно и то же)
+  binance: &collector
+    build: .
+    command: python3 services/collector/src/main.py
     env_file: .env
+    environment:
+      - EXCHANGE_ID=binance
+      - REDIS_HOST=redis
+    depends_on:
+      - redis
+    restart: always
+
+  # Генерация остальных 9 бирж из шаблона
+  bybit: { <<: *collector, environment: [ EXCHANGE_ID=bybit, REDIS_HOST=redis ] }
+  okx: { <<: *collector, environment: [ EXCHANGE_ID=okx, REDIS_HOST=redis ] }
+  gate: { <<: *collector, environment: [ EXCHANGE_ID=gate, REDIS_HOST=redis ] }
+  kucoin: { <<: *collector, environment: [ EXCHANGE_ID=kucoin, REDIS_HOST=redis ] }
+  mexc: { <<: *collector, environment: [ EXCHANGE_ID=mexc, REDIS_HOST=redis ] }
+  bitget: { <<: *collector, environment: [ EXCHANGE_ID=bitget, REDIS_HOST=redis ] }
+  htx: { <<: *collector, environment: [ EXCHANGE_ID=htx, REDIS_HOST=redis ] }
+  kraken: { <<: *collector, environment: [ EXCHANGE_ID=kraken, REDIS_HOST=redis ] }
+  coinbase: { <<: *collector, environment: [ EXCHANGE_ID=coinbase, REDIS_HOST=redis ] }

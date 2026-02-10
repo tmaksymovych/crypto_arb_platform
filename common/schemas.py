@@ -32,3 +32,18 @@ class Ticker(BaseModel):
         if self.bid == 0:
             return 0.0
         return ((self.ask - self.bid) / self.bid) * 100
+    
+
+
+class NetworkStatus(BaseModel):
+    name: str
+    deposit: bool
+    withdraw: bool
+    fee : Optional[float] #fee for withdrawal, if applicable
+
+class CurrencyStatus(BaseModel):
+    symbol: str
+    exchange: str
+    networks: dict[str, NetworkStatus] # list of networks for this currency, e.g. {'ERC20': NetworkStatus(...), 'BEP20': NetworkStatus(...)}
+
+    
