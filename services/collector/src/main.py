@@ -49,7 +49,9 @@ async def fetch_and_process(exchange, redis_client):
                     exchange=exchange.id,
                     bid=float(data['bid']) if data['bid'] else 0.0,
                     ask=float(data['ask']) if data['ask'] else 0.0,
-                    volume=float(vol) if vol else 0.0
+                    volume=float(vol) if vol else 0.0,
+                    quoteVolume=float(vol) if vol else 0.0,
+                    
                 )
                 
                 key = f"ticker:{EXCHANGE_ID}:{norm_symbol}"
