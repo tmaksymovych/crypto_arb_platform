@@ -15,9 +15,9 @@ logger = logging.getLogger("Analyzer")
 
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 
-MIN_VOLUME_USDT = 10000.0
-THRESHOLD = 0.45  # Arbitrage threshold in percentage
-SIGNAL_TTL = 150  # Time to live for arbitrage signals in seconds (2.5 minutes)
+MIN_VOLUME_USDT = 90000.0
+THRESHOLD = 0.75  # Arbitrage threshold in percentage
+SIGNAL_TTL = 30  # Time to live for arbitrage signals in seconds (2.5 minutes)
 BLACKLIST = ['U/USDT']
 
 async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, sell_ticker):
@@ -31,35 +31,35 @@ async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, se
         return
 
     profit = (sell_price / buy_price - 1) * 100
-
-    if profit < THRESHOLD or profit > 50: # if we have profit
-        return
-        
     signal_key = f"signal:{symbol}:{buy_exchange}_to_{sell_exchange}"
 
-    start_time = await r.get(signal_key)
+    if profit >= THRESHOLD and profit <= 50: # if we have profit
+        
+        
 
-    if not start_time:
-        # it is 1st signal, start timer
-        await r.set(signal_key, time.time())
-        # logger.info(f"New arbitrage signal: {symbol} {buy_exchange}→{sell_exchange} profit={profit:.2f}%")
-    else:
-        # signal already exists, check duration
-        duration = time.time() - float(start_time)
+        start_time = await r.get(signal_key)
 
-        if duration >= SIGNAL_TTL:
-            logger.info(f"Signal confirmed: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
-            # here you call telegram bot
-            await r.delete(signal_key)    
-        # else:
+        if not start_time:
+            # it is 1st signal, start timer
+            await r.set(signal_key, time.time())
+            # logger.info(f"New arbitrage signal: {symbol} {buy_exchange}→{sell_exchange} profit={profit:.2f}%")
+        else:
+            # signal already exists, check duration
+            duration = time.time() - float(start_time)
+
+            if duration >= SIGNAL_TTL:
+                logger.info(f"Signal confirmed: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
+                # here you call telegram bot
+                await r.delete(signal_key)    
+            # else:
         #     # to not spam logs, we log only once per minute
         #     if int(duration) % 60 < 5:
         #         logger.info(f"Signal pending: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
-    # else:
-    #     # if profit drops below threshold, remove signal
-    #     if await r.exists(signal_key):
-    #         logger.info(f"Signal removed: {symbol} {buy_exchange}→{sell_exchange} profit={profit:.2f}%")
-    #         await r.delete(signal_key)
+    else:
+        # if profit drops below threshold, remove signal
+        if await r.exists(signal_key):
+            await r.delete(signal_key)
+            # logger.info(f"Signal removed: {symbol} {buy_exchange}→{sell_exchange} profit={profit:.2f}%")
 
 
 async def main():
