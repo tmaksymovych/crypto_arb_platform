@@ -39,4 +39,3 @@ services:
   bitget: { <<: *collector, environment: [ EXCHANGE_ID=bitget, REDIS_HOST=redis ] }
   htx: { <<: *collector, environment: [ EXCHANGE_ID=htx, REDIS_HOST=redis ] }
   kraken: { <<: *collector, environment: [ EXCHANGE_ID=kraken, REDIS_HOST=redis ] }
-  coinbase: { <<: *collector, environment: [ EXCHANGE_ID=coinbase, REDIS_HOST=redis ] }
