@@ -4,7 +4,12 @@ import logging
 import os
 import redis.asyncio as redis
 import time
+import aiohttp
 from common.schemas import Ticker
+
+TG_TOKEN = os.getenv("TG_BOT_TOKEN")
+# TG_CHAT_DMYTRO_ID = os.getenv("TG_DIMA_ID")
+MY_TG_ID = os.getenv("MY_TG_ID")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,10 +20,29 @@ logger = logging.getLogger("Analyzer")
 
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 
-MIN_VOLUME_USDT = 90000.0
+MIN_VOLUME_USDT = 70000.0
 THRESHOLD = 0.75  # Arbitrage threshold in percentage
 SIGNAL_TTL = 30  # Time to live for arbitrage signals in seconds (2.5 minutes)
 BLACKLIST = ['U/USDT']
+
+if not TG_TOKEN or not MY_TG_ID:
+    logger.error("Критическая ошибка: TG_BOT_TOKEN или MY_TG_ID не найдены в переменных окружения!")
+
+async def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    payload = {
+        "chat_id":MY_TG_ID,
+        "text":message,
+        "parse_mode":"HTML"
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                if response.status != 200:
+                    logger.error(f"ошибка отправки в TG: {await response.text()}")
+    except Exception as e:
+        logger.error(f"TG Connection Error: {e}")
+
 
 async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, sell_ticker):
     """
@@ -35,7 +59,6 @@ async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, se
 
     if profit >= THRESHOLD and profit <= 50: # if we have profit
         
-        
 
         start_time = await r.get(signal_key)
 
@@ -48,8 +71,17 @@ async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, se
             duration = time.time() - float(start_time)
 
             if duration >= SIGNAL_TTL:
+                msg = (
+                    f"✅ <b>CONFIRMED ARBITRAGE</b>\n\n"
+                    f"💎 <b>{symbol}</b>\n"
+                    f"🟢 Buy: {buy_exchange.upper()} ({buy_price})\n"
+                    f"🔴 Sell: {sell_exchange.upper()} ({sell_price})\n"
+                    f"💰 <b>Profit: {profit:.2f}%</b>\n"
+                    f"⏱ Duration: {duration:.1f}s"
+                )
                 logger.info(f"Signal confirmed: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
                 # here you call telegram bot
+                await send_telegram(msg)
                 await r.delete(signal_key)    
             # else:
         #     # to not spam logs, we log only once per minute
