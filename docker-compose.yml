@@ -32,10 +32,10 @@ services:
 
   # Генерация остальных 9 бирж из шаблона
   bybit: { <<: *collector, environment: [ EXCHANGE_ID=bybit, REDIS_HOST=redis ] }
-  okx: { <<: *collector, environment: [ EXCHANGE_ID=okx, REDIS_HOST=redis ] }
+  # okx: { <<: *collector, environment: [ EXCHANGE_ID=okx, REDIS_HOST=redis ] }
   gate: { <<: *collector, environment: [ EXCHANGE_ID=gate, REDIS_HOST=redis ] }
   kucoin: { <<: *collector, environment: [ EXCHANGE_ID=kucoin, REDIS_HOST=redis ] }
   mexc: { <<: *collector, environment: [ EXCHANGE_ID=mexc, REDIS_HOST=redis ] }
-  bitget: { <<: *collector, environment: [ EXCHANGE_ID=bitget, REDIS_HOST=redis ] }
+  # bitget: { <<: *collector, environment: [ EXCHANGE_ID=bitget, REDIS_HOST=redis ] }
   htx: { <<: *collector, environment: [ EXCHANGE_ID=htx, REDIS_HOST=redis ] }
-  kraken: { <<: *collector, environment: [ EXCHANGE_ID=kraken, REDIS_HOST=redis ] }
+  # kraken: { <<: *collector, environment: [ EXCHANGE_ID=kraken, REDIS_HOST=redis ] }

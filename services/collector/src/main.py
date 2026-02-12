@@ -91,7 +91,7 @@ async def main():
     exchange = exchange_class({
         "enableRateLimit": True, # built-in rate limiter to avoid hitting API limits
         "options": {
-            "defaultType": "spot"
+            "defaultType": "swap"
         }
     })
 
