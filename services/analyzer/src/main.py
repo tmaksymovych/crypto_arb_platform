@@ -55,10 +55,10 @@ async def send_telegram(message):
 
 
 LEVERAGE = 6    # Arbitrage threshold in percentage
-THRESHOLD = 0.6   # Minimum spread percentage to consider for arbitrage
+THRESHOLD = 0.   # Minimum spread percentage to consider for arbitrage
 ESTIMATED_FEE_TOTAL = 0.22  # Estimated total fees for arbitrage
-MIN_VOLUME_USDT = 5000000 # 5 million USD minimum volume to consider for arbitrage
-SIGNAL_TTL = 10 
+MIN_VOLUME_USDT = 2500000.0 # 5 million USD minimum volume to consider for arbitrage
+SIGNAL_TTL = 10
 BLACKLIST = ['U/USDT']
 
 async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long_ticker, short_ticker):
@@ -98,8 +98,8 @@ async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long
         if not start_time:
             # ex=60: Ключ живет в Redis 60 секунд. 
             # Это дает запас времени, чтобы таймер (10 сек) успел сработать.
-            await r.set(signal_key, time.time(), ex=60)
-            # logger.info(f"NEW {symbol} {long_exchange}->{short_exchange} Spread: {spread:.2f}%")    
+            await r.set(signal_key, str(time.time()), ex=60)
+            logger.info(f"NEW {symbol} {long_exchange}->{short_exchange} Spread: {spread:.2f}%")    
         else:
             duration = time.time() - float(start_time)
             if duration >= SIGNAL_TTL:
@@ -144,7 +144,7 @@ async def main():
 
                 exchange_id = parts[1]
                 # extract symbol from the key   ticker:binance:BTC/USDT -> BTC/USDT
-                symbol = parts[2]
+                symbol = parts[2].split(":")[0]
                 
                 if symbol in BLACKLIST:
                     continue
@@ -172,8 +172,17 @@ async def main():
 
                         ticker1 = exchanges[EX1]
                         ticker2 = exchanges[EX2]
+                        
+                        vol1 = ticker1.quoteVolume
+                        if vol1 <= 0:
+                            vol1 = ticker1.volume * ticker1.bid if ticker1.volume < 1000000 else ticker1.volume
 
-                        if ticker1.quoteVolume < MIN_VOLUME_USDT or ticker2.quoteVolume < MIN_VOLUME_USDT:
+                        vol2 = ticker2.quoteVolume
+                        if vol2 <= 0:
+                            vol2 = ticker2.volume * ticker2.bid if ticker2.volume < 1000000 else ticker2.volume
+
+                        # Фильтруем по исправленным объемам
+                        if vol1 < MIN_VOLUME_USDT or vol2 < MIN_VOLUME_USDT:
                             continue
 
                         await check_futures_arbitrage(r, symbol, EX1, EX2, ticker1, ticker2)
