@@ -5,11 +5,10 @@ import os
 import redis.asyncio as redis
 import time
 import aiohttp
+from dotenv import load_dotenv
 from common.schemas import Ticker
 
-TG_TOKEN = os.getenv("TG_BOT_TOKEN")
-# TG_CHAT_DMYTRO_ID = os.getenv("TG_DIMA_ID")
-MY_TG_ID = os.getenv("MY_TG_ID")
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,31 +17,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Analyzer")
 
-REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
+# Загрузка настроек
+TG_TOKEN = os.getenv("TG_BOT_TOKEN")
+raw_ids = os.getenv("CHAT_IDS", "")
+CHAT_IDS = [x.strip() for x in raw_ids.split(",") if x.strip()]
 
-MIN_VOLUME_USDT = 70000.0
-THRESHOLD = 0.75  # Arbitrage threshold in percentage
-SIGNAL_TTL = 30  # Time to live for arbitrage signals in seconds (2.5 minutes)
+logger.info(f"Загруженные ID: {CHAT_IDS}")
+
+
+
+REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
+MIN_VOLUME_USDT = 50000.0
+THRESHOLD = 1.0  # Arbitrage threshold in percentage
+SIGNAL_TTL = 300  # Time to live for arbitrage signals in seconds (2.5 minutes)
 BLACKLIST = ['U/USDT']
 
-if not TG_TOKEN or not MY_TG_ID:
+if not TG_TOKEN or not CHAT_IDS:
     logger.error("Критическая ошибка: TG_BOT_TOKEN или MY_TG_ID не найдены в переменных окружения!")
 
 async def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-    payload = {
-        "chat_id":MY_TG_ID,
-        "text":message,
-        "parse_mode":"HTML"
-    }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    logger.error(f"ошибка отправки в TG: {await response.text()}")
-    except Exception as e:
-        logger.error(f"TG Connection Error: {e}")
+    if not TG_TOKEN:
+        return
+    async with aiohttp.ClientSession() as session:
+        for chatId in CHAT_IDS:
 
+            cleanId = str(chatId).strip()
+            if not cleanId:
+                continue
+
+            url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+            payload = {
+                "chat_id":chatId,
+                "text":message,
+                "parse_mode":"HTML"
+            }
+            try:
+                async with session.post(url, json=payload) as response:
+                        if response.status != 200:
+                            logger.error(f"ошибка отправки в TG: {await response.text()}")
+                        else:
+                            logger.info(f"Успешно отправлен в чат {chatId}")
+            except Exception as e:
+                logger.error(f"TG Connection Error: {e}")
 
 async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, sell_ticker):
     """
@@ -77,7 +93,7 @@ async def check_arbitrage(r, symbol, buy_exchange, sell_exchange, buy_ticker, se
                     f"🟢 Buy: {buy_exchange.upper()} ({buy_price})\n"
                     f"🔴 Sell: {sell_exchange.upper()} ({sell_price})\n"
                     f"💰 <b>Profit: {profit:.2f}%</b>\n"
-                    f"⏱ Duration: {duration:.1f}s"
+                    f"⏱ Duration: {duration/60:.1f} min"
                 )
                 logger.info(f"Signal confirmed: {symbol} {buy_exchange}→{sell_exchange} duration={duration/60:.1f}min profit={profit:.2f}%")
                 # here you call telegram bot
@@ -98,6 +114,7 @@ async def main():
     r = redis.Redis(host=REDIS_HOST, port=6379, decode_responses=True)
     logger.info("Redis connected, starting analyzer")
     logger.info(f"Threshold={THRESHOLD}% TTL={SIGNAL_TTL/60:.1f}min")
+    logger.info(f"Analyzer started. Active chats: {len(CHAT_IDS)}")
 
     while True:
         try:
