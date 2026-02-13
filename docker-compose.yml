@@ -37,5 +37,5 @@ services:
   kucoin: { <<: *collector, environment: [ EXCHANGE_ID=kucoin, REDIS_HOST=redis ] }
   mexc: { <<: *collector, environment: [ EXCHANGE_ID=mexc, REDIS_HOST=redis ] }
   # bitget: { <<: *collector, environment: [ EXCHANGE_ID=bitget, REDIS_HOST=redis ] }
-  htx: { <<: *collector, environment: [ EXCHANGE_ID=htx, REDIS_HOST=redis ] }
+  # htx: { <<: *collector, environment: [ EXCHANGE_ID=htx, REDIS_HOST=redis ] }
   # kraken: { <<: *collector, environment: [ EXCHANGE_ID=kraken, REDIS_HOST=redis ] }

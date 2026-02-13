@@ -4,7 +4,11 @@ import logging
 import os
 import redis.asyncio as redis
 import time
+import aiohttp
+from dotenv import load_dotenv
 from common.schemas import Ticker
+
+load_dotenv() 
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,11 +19,46 @@ logger = logging.getLogger("Analyzer")
 
 REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 
+TG_TOKEN = os.getenv("TG_BOT_TOKEN")
+raw_ids = os.getenv("CHAT_IDS", "")
+CHAT_IDS = [x.strip() for x in raw_ids.split(",") if x.strip()]
+
+logger.info(f"Загруженные ID: {CHAT_IDS}")
+
+if not TG_TOKEN or not CHAT_IDS:
+    logger.error("Критическая ошибка: TG_BOT_TOKEN или MY_TG_ID не найдены в переменных окружения!")
+
+async def send_telegram(message):
+    if not TG_TOKEN:
+        return
+    async with aiohttp.ClientSession() as session:
+        for chatId in CHAT_IDS:
+
+            cleanId = str(chatId).strip()
+            if not cleanId:
+                continue
+
+            url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+            payload = {
+                "chat_id":chatId,
+                "text":message,
+                "parse_mode":"HTML"
+            }
+            try:
+                async with session.post(url, json=payload) as response:
+                        if response.status != 200:
+                            logger.error(f"ошибка отправки в TG: {await response.text()}")
+                        else:
+                            logger.info(f"Успешно отправлен в чат {chatId}")
+            except Exception as e:
+                logger.error(f"TG Connection Error: {e}")
+
+
 LEVERAGE = 6    # Arbitrage threshold in percentage
 THRESHOLD = 0.6   # Minimum spread percentage to consider for arbitrage
 ESTIMATED_FEE_TOTAL = 0.22  # Estimated total fees for arbitrage
-MIN_VOLUME_USDT = 5000000.0 # 5 million USD minimum volume to consider for arbitrage
-SIGNAL_TTL = 5 
+MIN_VOLUME_USDT = 5000000 # 5 million USD minimum volume to consider for arbitrage
+SIGNAL_TTL = 10 
 BLACKLIST = ['U/USDT']
 
 async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long_ticker, short_ticker):
@@ -57,25 +96,27 @@ async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long
         start_time = await r.get(signal_key)
 
         if not start_time:
-            await r.set(signal_key, time.time(), ex=SIGNAL_TTL)
+            # ex=60: Ключ живет в Redis 60 секунд. 
+            # Это дает запас времени, чтобы таймер (10 сек) успел сработать.
+            await r.set(signal_key, time.time(), ex=60)
             # logger.info(f"NEW {symbol} {long_exchange}->{short_exchange} Spread: {spread:.2f}%")    
         else:
             duration = time.time() - float(start_time)
             if duration >= SIGNAL_TTL:
                 logger.info(f"CONFIRMED {symbol} Profit: {net_spread:.2f}% ROE: {roe:.2f}%")
-                # msg = (
-                #         f"🚀 <b>FUTURES ARB (x{LEVERAGE})</b>\n\n"
-                #         f"💎 <b>{symbol}</b>\n"
-                #         f"📉 <b>SHORT: {short_ex.upper()}</b> ({short_price})\n"
-                #         f"📈 <b>LONG:  {long_ex.upper()}</b> ({long_price})\n\n"     
-                #         f"📊 Raw Spread: {spread:.2f}%\n"
-                #         f"💸 Fees: -{fees_cost}%\n"
-                #         f"🟢 <b>Net Spread: {net_spread:.2f}%</b>\n\n"
+                msg = (
+                        f"🚀 <b>FUTURES ARB (x{LEVERAGE})</b>\n\n"
+                        f"💎 <b>{symbol}</b>\n"
+                        f"📉 <b>SHORT: {short_exchange.upper()}</b> ({short_price})\n"
+                        f"📈 <b>LONG:  {long_exchange.upper()}</b> ({long_price})\n\n"     
+                        f"📊 Raw Spread: {spread:.2f}%\n"
+                        f"💸 Fees: -{fees_cost}%\n"
+                        f"🟢 <b>Net Spread: {net_spread:.2f}%</b>\n\n"
                         
-                #         f"🔥 <b>Est. ROE: {roe:.2f}%</b> (Net Profit)\n"
-                #         f"⏱ Duration: {duration:.1f}s"
-                #     )
-                # await send_telegram_alert(msg)
+                        f"🔥 <b>Est. ROE: {roe:.2f}%</b> (Net Profit)\n"
+                        f"⏱ Duration: {duration:.1f}s"
+                    )
+                await send_telegram(msg)
                 await r.delete(signal_key)
     else:
         if await r.exists(signal_key):
