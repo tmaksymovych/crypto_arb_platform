@@ -57,8 +57,8 @@ async def send_telegram(message):
 LEVERAGE = 6    # Arbitrage threshold in percentage
 THRESHOLD = 0.   # Minimum spread percentage to consider for arbitrage
 ESTIMATED_FEE_TOTAL = 0.22  # Estimated total fees for arbitrage
-MIN_VOLUME_USDT = 2500000.0 # 5 million USD minimum volume to consider for arbitrage
-SIGNAL_TTL = 10
+MIN_VOLUME_USDT = 5000000.0 # 5 million USD minimum volume to consider for arbitrage
+SIGNAL_TTL = 5
 BLACKLIST = ['U/USDT']
 
 async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long_ticker, short_ticker):
@@ -91,8 +91,11 @@ async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long
     roe = net_spread * LEVERAGE
 
     signal_key = f"futures_signal:{symbol}:{long_exchange}->{short_exchange}"
+    cooldown_key = f"cooldown:{symbol}:{long_exchange}->{short_exchange}"
 
     if net_spread > 0 and net_spread < 5:
+        if await r.exists(cooldown_key):
+            return
         start_time = await r.get(signal_key)
 
         if not start_time:
@@ -117,12 +120,12 @@ async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long
                         f"⏱ Duration: {duration:.1f}s"
                     )
                 await send_telegram(msg)
+                await r.set(cooldown_key, "sent", ex=300)  # Cooldown 10 seconds
                 await r.delete(signal_key)
+
     else:
         if await r.exists(signal_key):
             await r.delete(signal_key)
-
-
 
 
 async def main():
@@ -188,12 +191,13 @@ async def main():
                         await check_futures_arbitrage(r, symbol, EX1, EX2, ticker1, ticker2)
                         await check_futures_arbitrage(r, symbol, EX2, EX1, ticker2, ticker1)
 
-            await asyncio.sleep(2)  # small pause to not overload Redis
+            await asyncio.sleep(1)  # small pause to not overload Redis
 
-        
         except Exception as e:
             logger.error(f"Main loop error: {e}")
             await asyncio.sleep(5)
+
+
 
 if __name__ == "__main__":
     asyncio.run(main())
