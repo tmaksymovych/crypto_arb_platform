@@ -55,17 +55,16 @@ async def send_telegram(message):
                 logger.error(f"TG Connection Error: {e}")
 
 
+
+
 LEVERAGE = 6    # Arbitrage threshold in percentage
-THRESHOLD = 0.   # Minimum spread percentage to consider for arbitrage
+THRESHOLD = 0.1   # Minimum spread percentage to consider for arbitrage
 ESTIMATED_FEE_TOTAL = 0.22  # Estimated total fees for arbitrage
 MIN_VOLUME_USDT = 5000000.0 # 5 million USD minimum volume to consider for arbitrage
 SIGNAL_TTL = 5
 BLACKLIST = ['U/USDT']
 
-async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long_ticker, short_ticker):
-    """
-    check arbitrage between two exchanges nad control timer
-    """
+def calculate_arbitrage_opportunity(symbol, buy_exchange, sell_exchange, long_ticker, short_ticker):
     long_price = long_ticker.ask
     short_price = short_ticker.bid
 
@@ -74,60 +73,31 @@ async def check_futures_arbitrage(r, symbol, long_exchange, short_exchange, long
     
    # 1. "Грязный" спред в процентах
     spread = ((short_price - long_price) / long_price) * 100
-
-    # Если спред меньше порога (0.6%), даже не смотрим, чтобы не кормить биржу
-    if spread < THRESHOLD:
-        return
-
     # 2. Расчет чистой прибыли
     # Сколько мы отдадим бирже за круг (4 сделки)
     fees_cost = ESTIMATED_FEE_TOTAL # 0.22%
-    
     # Чистый спред (Spread - Fees)
     net_spread = spread - fees_cost
-    
     # 3. ROE (Прибыль на вложенные свои деньги с учетом плеча)
     # Пример: Спред 1%, Комиссия 0.22%, Чистыми 0.78%. Плечо x6.
     # ROE = 0.78% * 6 = 4.68%
     roe = net_spread * LEVERAGE
 
-    signal_key = f"futures_signal:{symbol}:{long_exchange}->{short_exchange}"
-    cooldown_key = f"cooldown:{symbol}:{long_exchange}->{short_exchange}"
+    # Если спред меньше порога (0.6%), даже не смотрим, чтобы не кормить биржу
+    if net_spread < THRESHOLD or net_spread > 50:  # И добавляем верхнюю границу, чтобы отсеять аномалии
+        return None
 
-    if net_spread > 0 and net_spread < 5:
-        if await r.exists(cooldown_key):
-            return
-        start_time = await r.get(signal_key)
-
-        if not start_time:
-            # ex=60: Ключ живет в Redis 60 секунд. 
-            # Это дает запас времени, чтобы таймер (10 сек) успел сработать.
-            await r.set(signal_key, str(time.time()), ex=60)
-            logger.info(f"NEW {symbol} {long_exchange}->{short_exchange} Spread: {spread:.2f}%")    
-        else:
-            duration = time.time() - float(start_time)
-            if duration >= SIGNAL_TTL:
-                logger.info(f"CONFIRMED {symbol} Profit: {net_spread:.2f}% ROE: {roe:.2f}%")
-                msg = (
-                        f"🚀 <b>FUTURES ARB (x{LEVERAGE})</b>\n\n"
-                        f"💎 <b>{symbol}</b>\n"
-                        f"📉 <b>SHORT: {short_exchange.upper()}</b> ({short_price})\n"
-                        f"📈 <b>LONG:  {long_exchange.upper()}</b> ({long_price})\n\n"     
-                        f"📊 Raw Spread: {spread:.2f}%\n"
-                        f"💸 Fees: -{fees_cost}%\n"
-                        f"🟢 <b>Net Spread: {net_spread:.2f}%</b>\n\n"
-                        
-                        f"🔥 <b>Est. ROE: {roe:.2f}%</b> (Net Profit)\n"
-                        f"⏱ Duration: {duration:.1f}s"
-                    )
-                await send_telegram(msg)
-                await r.set(cooldown_key, "sent", ex=300)  # Cooldown 10 seconds
-                await r.delete(signal_key)
-
-    else:
-        if await r.exists(signal_key):
-            await r.delete(signal_key)
-
+    return {
+            "symbol": symbol,
+            "buy_exchange": buy_exchange,
+            "sell_exchange": sell_exchange,
+            "long_price": long_price,
+            "short_price": short_price,
+            "spread": spread,
+            "profit": net_spread,
+            "roe": roe
+        }
+     
 
 async def main():
     r = redis.Redis(host=REDIS_HOST, port=6379, decode_responses=True)
@@ -142,7 +112,6 @@ async def main():
 
             for key in keys:
                 parts = key.split(":")
-                
                 # РЕШЕНИЕ: Разрешаем и 3, и 4 части
                 if len(parts) < 3: 
                     continue
@@ -164,42 +133,73 @@ async def main():
                         continue
 
             for symbol, exchanges in market_snapshot.items():
-
                 exchanges_names = list(exchanges.keys())
-
                 if len(exchanges_names) < 2:
                     continue
 
+                candidates = []
                 for i in range(len(exchanges_names)):
                     for j in range(i + 1, len(exchanges_names)):
-                        EX1 = exchanges_names[i]
-                        EX2 = exchanges_names[j]
-
-                        ticker1 = exchanges[EX1]
-                        ticker2 = exchanges[EX2]
+                        ex1 = exchanges_names[i]
+                        ex2 = exchanges_names[j]
+                        ticker1 = exchanges[ex1]
+                        ticker2 = exchanges[ex2]
                         
                         vol1 = ticker1.quoteVolume
                         if vol1 <= 0:
                             vol1 = ticker1.volume * ticker1.bid if ticker1.volume < 1000000 else ticker1.volume
-
                         vol2 = ticker2.quoteVolume
                         if vol2 <= 0:
                             vol2 = ticker2.volume * ticker2.bid if ticker2.volume < 1000000 else ticker2.volume
-
-                        # Фильтруем по исправленным объемам
                         if vol1 < MIN_VOLUME_USDT or vol2 < MIN_VOLUME_USDT:
                             continue
 
-                        await check_futures_arbitrage(r, symbol, EX1, EX2, ticker1, ticker2)
-                        await check_futures_arbitrage(r, symbol, EX2, EX1, ticker2, ticker1)
+                        var1 = calculate_arbitrage_opportunity(symbol, ex1, ex2, ticker1, ticker2)
+                        if var1:
+                            candidates.append(var1)
+                        var2 = calculate_arbitrage_opportunity(symbol, ex2, ex1, ticker2, ticker1)
+                        if var2:
+                            candidates.append(var2)
+                
+                if not candidates:
+                    continue
+
+                best_opportunity = max(candidates, key=lambda x: x["profit"])
+                cooldown_key = f"cooldown:{symbol}"
+                timer_key = f"timer:{symbol}"
+
+                if await r.exists(cooldown_key):
+                    continue
+                
+                start_time = await r.get(timer_key)
+                if not start_time:
+                    await r.set(timer_key, time.time(), ex=30)
+                    logging.info(f"NEW SIGNAL {symbol} Profit: {best_opportunity['profit']:.2f}% ROE: {best_opportunity['roe']:.2f}%")
+                else:
+                    duration = time.time() - float(start_time)
+                    if duration >= SIGNAL_TTL:
+                        logger.info(f"CONFIRMED {symbol} Profit: {best_opportunity['profit']:.2f}% ROE: {best_opportunity['roe']:.2f}%")
+                        msg = (
+                                f"🚀 <b>FUTURES ARB (x{LEVERAGE})</b>\n\n"
+                                f"💎 <b>{symbol}</b>\n"
+                                f"📉 <b>SHORT: {best_opportunity['sell_exchange'].upper()}</b> ({best_opportunity['short_price']})\n"
+                                f"📈 <b>LONG:  {best_opportunity['buy_exchange'].upper()}</b> ({best_opportunity['long_price']})\n\n"     
+                                f"📊 Raw Spread: {best_opportunity['spread']:.2f}%\n"
+                                f"💸 Fees: -{ESTIMATED_FEE_TOTAL}%\n"
+                                f"🟢 <b>Net Spread: {best_opportunity['profit']:.2f}%</b>\n\n"
+                                
+                                f"🔥 <b>Est. ROE: {best_opportunity['roe']:.2f}%</b> (Net Profit)\n"
+                                f"⏱ Duration: {duration:.1f}s"
+                            )
+                        await send_telegram(msg)
+                        await r.set(cooldown_key, "sent", ex=1800)  # Cooldown 5 minutes
+                        await r.delete(timer_key)
 
             await asyncio.sleep(1)  # small pause to not overload Redis
 
         except Exception as e:
             logger.error(f"Main loop error: {e}")
             await asyncio.sleep(5)
-
-
 
 if __name__ == "__main__":
     asyncio.run(main())
