@@ -21,7 +21,8 @@ REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
 
 TG_TOKEN = os.getenv("TG_BOT_TOKEN")
 raw_ids = os.getenv("CHAT_IDS", "")
-CHAT_IDS = [x.strip() for x in raw_ids.split(",") if x.strip()]
+test_id = os.getenv("MY_TG_ID", "")
+CHAT_IDS = [x.strip() for x in test_id.split(",") if x.strip()]
 
 logger.info(f"Загруженные ID: {CHAT_IDS}")
 
@@ -140,17 +141,18 @@ async def main():
             market_snapshot = {}
 
             for key in keys:
-
                 parts = key.split(":")
-                if len(parts) != 3:
+                
+                # РЕШЕНИЕ: Разрешаем и 3, и 4 части
+                if len(parts) < 3: 
                     continue
-
                 exchange_id = parts[1]
-                # extract symbol from the key   ticker:binance:BTC/USDT -> BTC/USDT
-                symbol = parts[2].split(":")[0]
+                # РЕШЕНИЕ: Всегда берем символ из 3-й части, игнорируя хвосты
+                symbol = parts[2] 
                 
                 if symbol in BLACKLIST:
                     continue
+                # Дальше твой код без изменений...
 
                 raw_data = await r.get(key)
                 if raw_data:
