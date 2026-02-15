@@ -58,10 +58,10 @@ async def send_telegram(message):
 
 
 LEVERAGE = 6    # Arbitrage threshold in percentage
-THRESHOLD = 0.1   # Minimum spread percentage to consider for arbitrage
+THRESHOLD = 1.2   # Minimum spread percentage to consider for arbitrage
 ESTIMATED_FEE_TOTAL = 0.22  # Estimated total fees for arbitrage
 MIN_VOLUME_USDT = 5000000.0 # 5 million USD minimum volume to consider for arbitrage
-SIGNAL_TTL = 5
+SIGNAL_TTL = 15
 BLACKLIST = ['U/USDT']
 
 def calculate_arbitrage_opportunity(symbol, buy_exchange, sell_exchange, long_ticker, short_ticker):
